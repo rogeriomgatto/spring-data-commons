@@ -15,16 +15,15 @@
  */
 package org.springframework.data.repository.query;
 
+import java.util.HashMap;
 import java.util.Map;
-import java.util.Map.Entry;
-import java.util.stream.Collectors;
 
 import org.springframework.data.repository.query.SpelQueryContext.SpelExtractor;
 import org.springframework.data.spel.ExpressionDependencies;
 import org.springframework.expression.EvaluationContext;
 import org.springframework.expression.Expression;
+import org.springframework.expression.TypedValue;
 import org.springframework.expression.spel.standard.SpelExpressionParser;
-import org.springframework.lang.Nullable;
 import org.springframework.util.Assert;
 
 /**
@@ -63,10 +62,29 @@ public class SpelEvaluator {
 		Assert.notNull(values, "Values must not be null.");
 
 
-		return extractor.getParameters().collect(Collectors.toMap(//
-				Entry::getKey, //
-				it -> getSpElValue(it.getValue(), values) //
-		));
+		return extractor.getParameters().collect(
+				HashMap::new,
+				(result, it) -> result.put(it.getKey(), getSpElValue(it.getValue(), values).getValue()),
+				HashMap::putAll
+		);
+	}
+
+	/**
+	 * Evaluate all the SpEL expressions in {@link SpelExtractor} based on values provided as an argument.
+	 *
+	 * @param values Parameter values. Must not be {@literal null}.
+	 * @return a map from parameter name to evaluated value. Guaranteed to be not {@literal null}.
+	 */
+	public Map<String, TypedValue> evaluateWithTypeInformation(Object[] values) {
+
+		Assert.notNull(values, "Values must not be null.");
+
+
+		return extractor.getParameters().collect(
+				HashMap::new,
+				(result, it) -> result.put(it.getKey(), getSpElValue(it.getValue(), values)),
+				HashMap::putAll
+		);
 	}
 
 	/**
@@ -78,13 +96,13 @@ public class SpelEvaluator {
 		return extractor.getQueryString();
 	}
 
-	@Nullable
-	private Object getSpElValue(String expressionString, Object[] values) {
+	private TypedValue getSpElValue(String expressionString, Object[] values) {
 
 		Expression expression = PARSER.parseExpression(expressionString);
 		EvaluationContext evaluationContext = evaluationContextProvider.getEvaluationContext(parameters, values,
 				ExpressionDependencies.discover(expression));
 
-		return expression.getValue(evaluationContext);
+		return new TypedValue(
+				expression.getValue(evaluationContext), expression.getValueTypeDescriptor(evaluationContext));
 	}
 }
